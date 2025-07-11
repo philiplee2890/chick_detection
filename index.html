@@ -4,6 +4,13 @@
     <title>YOLO Webcam Detection</title>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
     <script src="script.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // All your JS code here
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d'); // Now safe
+    });
+   </script>
     <style>
         body { font-family: Arial; text-align: center; }
         #webcam, #canvas { 
