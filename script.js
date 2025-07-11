@@ -14,10 +14,17 @@ const bboxColors = [
 
 // Load ONNX model
 async function loadModel() {
+    // Load from external URL (Google Drive/S3)
     const modelUrl = "https://drive.google.com/file/d/15Q41vuto_IeyDwfnaWtUypLh_qk0j-MB/view?usp=sharing";
-    const response = await fetch(modelUrl);
-    const modelBuffer = await response.arrayBuffer();
-    return await ort.InferenceSession.create(modelBuffer);
+    try {
+        const session = await ort.InferenceSession.create(modelUrl, {
+            executionProviders: ['wasm'],  // Fallback to CPU if needed
+        });
+        console.log("Model loaded externally!");
+        return session;
+    } catch (e) {
+        console.error("Failed to load model:", e);
+    }
 }
 // Preprocess frame (resize, normalize)
 function preprocessFrame(frame) {
