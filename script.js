@@ -1,17 +1,20 @@
-// script.js
-let model;
+// Initialize variables
+let model = null;
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const fpsDisplay = document.getElementById('fps');
 
-// Colors matching your Python script
+// Colors for bounding boxes
 const bboxColors = [
   [164, 120, 87], [68, 148, 228], [93, 97, 209],
   [178, 182, 133], [88, 159, 106], [96, 202, 231],
   [159, 124, 168], [169, 162, 241], [98, 118, 150],
   [172, 176, 184]
 ];
+
+// Class labels (replace with your actual classes)
+const labels = ['chick', 'sickchick']; // Example labels
 
 async function init() {
   try {
@@ -25,69 +28,129 @@ async function init() {
     detectObjects();
   } catch (e) {
     console.error("Initialization failed:", e);
+    alert("Error initializing: " + e.message);
   }
 }
 
 async function loadModel() {
-  // Use ONE of these options:
-  
-  // Option 1: Quantized model in repo (if <100MB)
-  // return await ort.InferenceSession.create('./best_quantized.onnx');
-  
-  // Option 2: External hosting (Google Drive/S3)
-  const modelUrl = 'YOUR_EXTERNAL_MODEL_URL';
-  return await ort.InferenceSession.create(modelUrl, {
-    executionProviders: ['wasm']
-  });
+  try {
+    // For external models (Google Drive/S3):
+    const modelUrl = 'https://drive.google.com/uc?export=download&id=15Q41vuto_IeyDwfnaWtUypLh_qk0j-MB';
+
+    return await ort.InferenceSession.create(modelUrl, {
+      executionProviders: ['wasm']
+    });
+  } catch (e) {
+    console.error("Model loading failed:", e);
+    throw new Error("Failed to load model. See console for details.");
+  }
 }
 
 async function startWebcam() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      width: { ideal: 640 },
-      height: { ideal: 480 },
-      facingMode: 'environment'
-    },
-    audio: false
-  });
-  
-  video.srcObject = stream;
-  await new Promise(resolve => {
-    video.onloadedmetadata = () => {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      resolve();
-    };
-  });
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        facingMode: 'environment'
+      },
+      audio: false
+    });
+    
+    video.srcObject = stream;
+    
+    // Wait for video metadata to load
+    await new Promise((resolve) => {
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        resolve();
+      };
+    });
+  } catch (e) {
+    console.error("Webcam error:", e);
+    throw new Error("Could not access webcam. Please enable permissions.");
+  }
 }
 
-let lastTimestamp = 0;
-async function detectObjects() {
-  // 1. Capture frame
+function processOutput(output) {
+  // Mock implementation - replace with your actual NMS processing
+  // This should return an array of detections in format:
+  // [x, y, width, height, confidence, classId]
+  return [
+    [100, 100, 200, 200, 0.9, 0], // Example detection
+    [300, 150, 100, 100, 0.85, 2]  // Another example
+  ];
+}
+
+function drawBoxes(detections) {
+  // Clear previous frame
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw current video frame
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   
-  // 2. Preprocess (simplified)
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const inputTensor = new ort.Tensor('float32', imageData.data, [1, 640, 640, 3]);
-  
-  // 3. Run inference
-  const { output } = await model.run({ images: inputTensor });
-  
-  // 4. Process results (mock implementation)
-  const detections = processOutput(output); // Implement your NMS here
-  
-  // 5. Draw results
-  drawBoxes(detections);
-  
-  // 6. Calculate FPS
-  const now = performance.now();
-  const fps = 1000 / (now - lastTimestamp);
-  lastTimestamp = now;
-  fpsDisplay.textContent = fps.toFixed(1);
-  
-  // 7. Repeat
-  requestAnimationFrame(detectObjects);
+  // Draw each detection
+  detections.forEach(det => {
+    const [x, y, w, h, conf, classId] = det;
+    
+    if (conf > 0.5) { // Confidence threshold
+      const color = bboxColors[classId % bboxColors.length];
+      
+      // Draw bounding box
+      ctx.strokeStyle = `rgb(${color.join(',')})`;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, w, h);
+      
+      // Draw label background
+      const label = `${labels[classId]} ${(conf * 100).toFixed(1)}%`;
+      const textWidth = ctx.measureText(label).width;
+      ctx.fillStyle = `rgba(${color.join(',')}, 0.5)`;
+      ctx.fillRect(x, y - 20, textWidth + 10, 20);
+      
+      // Draw label text
+      ctx.fillStyle = 'white';
+      ctx.font = '12px Arial';
+      ctx.fillText(label, x + 5, y - 5);
+    }
+  });
 }
 
-// Start everything
-init();
+let lastTimestamp = performance.now();
+let frameCount = 0;
+let fps = 0;
+
+async function detectObjects() {
+  try {
+    if (!model || !video.videoWidth) return;
+    
+    // 1. Run inference
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const inputTensor = new ort.Tensor('float32', imageData.data, [1, 3, canvas.height, canvas.width]);
+    const { output } = await model.run({ images: inputTensor });
+    
+    // 2. Process results
+    const detections = processOutput(output);
+    
+    // 3. Draw results
+    drawBoxes(detections);
+    
+    // 4. Calculate FPS
+    frameCount++;
+    const now = performance.now();
+    if (now - lastTimestamp >= 1000) {
+      fps = frameCount;
+      frameCount = 0;
+      lastTimestamp = now;
+    }
+    fpsDisplay.textContent = `FPS: ${fps}`;
+    
+    // 5. Repeat
+    requestAnimationFrame(detectObjects);
+  } catch (e) {
+    console.error("Detection error:", e);
+  }
+}
+
+// Start when DOM is ready
+document.addEventListener('DOMContentLoaded', init);
