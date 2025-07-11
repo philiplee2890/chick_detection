@@ -1,33 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>YOLO Webcam Detection</title>
+    <title>YOLO Webcam</title>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
-    <script src="script.js"></script>
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // All your JS code here
-      const canvas = document.getElementById('canvas');
-      const ctx = canvas.getContext('2d'); // Now safe
-    });
-   </script>
     <style>
         body { font-family: Arial; text-align: center; }
         #webcam, #canvas { 
-            width: 640px; 
-            height: 480px; 
-            border: 2px solid #000; 
+            width: 640px;
+            height: 480px;
+            border: 2px solid #000;
             margin: 10px auto;
+            display: block;
         }
-        #fps { color: #FF5722; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>YOLO Real-Time Webcam Detection</h1>
+    <h1>YOLO Webcam Detection</h1>
     <video id="webcam" autoplay muted></video>
     <canvas id="canvas"></canvas>
-    <div>FPS: <span id="fps">0</span></div>
-    <button id="startButton">Start Detection</button>
-    <script src="script.js"></script>
+    <button id="startBtn">Start Detection</button>
+    
+    <script src="script.js"></script> <!-- Load script LAST -->
 </body>
 </html>
