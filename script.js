@@ -1,101 +1,93 @@
-let modelSession;
-const video = document.getElementById("webcam");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const fpsElement = document.getElementById("fps");
-const startButton = document.getElementById("startButton");
+// script.js
+let model;
+const video = document.getElementById('webcam');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const fpsDisplay = document.getElementById('fps');
 
-// Colors for bounding boxes (matching your Python script)
+// Colors matching your Python script
 const bboxColors = [
-    [164, 120, 87], [68, 148, 228], [93, 97, 209], [178, 182, 133],
-    [88, 159, 106], [96, 202, 231], [159, 124, 168], [169, 162, 241],
-    [98, 118, 150], [172, 176, 184]
+  [164, 120, 87], [68, 148, 228], [93, 97, 209],
+  [178, 182, 133], [88, 159, 106], [96, 202, 231],
+  [159, 124, 168], [169, 162, 241], [98, 118, 150],
+  [172, 176, 184]
 ];
 
-// Load ONNX model
+async function init() {
+  try {
+    // 1. Load model
+    model = await loadModel();
+    
+    // 2. Start webcam
+    await startWebcam();
+    
+    // 3. Begin detection loop
+    detectObjects();
+  } catch (e) {
+    console.error("Initialization failed:", e);
+  }
+}
+
 async function loadModel() {
-    // Load from external URL (Google Drive/S3)
-    const modelUrl = "https://drive.google.com/file/d/15Q41vuto_IeyDwfnaWtUypLh_qk0j-MB/view?usp=sharing";
-    try {
-        const session = await ort.InferenceSession.create(modelUrl, {
-            executionProviders: ['wasm'],  // Fallback to CPU if needed
-        });
-        console.log("Model loaded externally!");
-        return session;
-    } catch (e) {
-        console.error("Failed to load model:", e);
-    }
-}
-// Preprocess frame (resize, normalize)
-function preprocessFrame(frame) {
-    const img = cv2.resize(frame, new cv2.Size(640, 640));
-    const tensor = cv2.dnn.blobFromImage(img, 1/255.0);
-    return tensor;
+  // Use ONE of these options:
+  
+  // Option 1: Quantized model in repo (if <100MB)
+  // return await ort.InferenceSession.create('./best_quantized.onnx');
+  
+  // Option 2: External hosting (Google Drive/S3)
+  const modelUrl = 'YOUR_EXTERNAL_MODEL_URL';
+  return await ort.InferenceSession.create(modelUrl, {
+    executionProviders: ['wasm']
+  });
 }
 
-// Draw bounding boxes
-function drawBoxes(detections, frameWidth, frameHeight) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    let objectCount = 0;
-
-    detections.forEach(det => {
-        const [xmin, ymin, xmax, ymax, conf, classId] = det;
-        if (conf > 0.5) {
-            const color = bboxColors[classId % 10];
-            ctx.strokeStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-            ctx.lineWidth = 2;
-            ctx.strokeRect(xmin, ymin, xmax - xmin, ymax - ymin);
-
-            // Draw label
-            ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-            ctx.font = "14px Arial";
-            ctx.fillText(`${classId}: ${(conf * 100).toFixed(1)}%`, xmin, ymin - 5);
-            objectCount++;
-        }
-    });
-
-    return objectCount;
+async function startWebcam() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      facingMode: 'environment'
+    },
+    audio: false
+  });
+  
+  video.srcObject = stream;
+  await new Promise(resolve => {
+    video.onloadedmetadata = () => {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      resolve();
+    };
+  });
 }
 
-// Main detection loop
+let lastTimestamp = 0;
 async function detectObjects() {
-    if (!modelSession) return;
-
-    const startTime = performance.now();
-    
-    // Capture frame from webcam
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    
-    // Run inference (simplified)
-    const inputTensor = new ort.Tensor("float32", new Float32Array(imageData.data), [1, 3, 640, 640]);
-    const { output } = await modelSession.run({ images: inputTensor });
-    
-    // Process output (mocked - replace with your NMS logic)
-    const detections = processYOLOOutput(output); 
-    const count = drawBoxes(detections, canvas.width, canvas.height);
-    
-    // Calculate FPS
-    const fps = 1000 / (performance.now() - startTime);
-    fpsElement.textContent = fps.toFixed(2);
-    
-    requestAnimationFrame(detectObjects);
+  // 1. Capture frame
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  
+  // 2. Preprocess (simplified)
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const inputTensor = new ort.Tensor('float32', imageData.data, [1, 640, 640, 3]);
+  
+  // 3. Run inference
+  const { output } = await model.run({ images: inputTensor });
+  
+  // 4. Process results (mock implementation)
+  const detections = processOutput(output); // Implement your NMS here
+  
+  // 5. Draw results
+  drawBoxes(detections);
+  
+  // 6. Calculate FPS
+  const now = performance.now();
+  const fps = 1000 / (now - lastTimestamp);
+  lastTimestamp = now;
+  fpsDisplay.textContent = fps.toFixed(1);
+  
+  // 7. Repeat
+  requestAnimationFrame(detectObjects);
 }
 
-// Start webcam
-startButton.addEventListener("click", async () => {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            detectObjects();
-        };
-    } catch (err) {
-        console.error("Webcam error:", err);
-    }
-});
-
-// Initialize
-loadModel();
+// Start everything
+init();
