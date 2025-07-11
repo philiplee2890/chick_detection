@@ -14,10 +14,11 @@ const bboxColors = [
 
 // Load ONNX model
 async function loadModel() {
-    modelSession = await ort.InferenceSession.create("my_model.onnx");
-    console.log("Model loaded!");
+    const modelUrl = "https://drive.google.com/file/d/15Q41vuto_IeyDwfnaWtUypLh_qk0j-MB/view?usp=sharing";
+    const response = await fetch(modelUrl);
+    const modelBuffer = await response.arrayBuffer();
+    return await ort.InferenceSession.create(modelBuffer);
 }
-
 // Preprocess frame (resize, normalize)
 function preprocessFrame(frame) {
     const img = cv2.resize(frame, new cv2.Size(640, 640));
